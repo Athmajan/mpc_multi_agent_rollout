@@ -1,0 +1,16 @@
+n_obstacle: 0
+n_good: 2
+n_adverse: 4
+max_cyc: 100
+action_dim: 5
+
+min_std: 0.1
+n_samples: 50
+momentum: 0.1
+num_elites: 5
+temperature: 0.5
+cem_iternations: 20
+horizon: 10
+
+parallel_flag: true
+std_schedule: linear(0.5, 0.05, 25000)

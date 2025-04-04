@@ -1,0 +1,29 @@
+# Ignore the /wandb folder
+/wandb/
+
+# Ignore the mpe_cont folder
+/mpe_cont/
+/movies/
+/pytorch_models/
+/adversary_acts/
+/csv_results/
+/frames/
+/modelAgent0/modelFiles/
+/results/
+/tdmpc2/
+/U2adversary_acts/
+/__pycache__/
+/modelAgent0/__pycache__/
+/mpe_cont2/
+/tdmpc2/tdmpc/
+/U2adversary_acts/
+
+# Ignore .mp4 files
+*.mp4
+
+# Ignore .csv files
+*.csv
+
+# Ignore .json files
+*.json
+
