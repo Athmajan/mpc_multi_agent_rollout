@@ -101,6 +101,81 @@ class MPPI_agent:
 
         return roll_cost 
     
+    def runTrajectory_forSampled(self,step_ct,observation_sam,prev_actions,control_seq):
+        cum_rew = 0
+        local_done = False
+        sim_env_sampled = simple_tag_v3.parallel_env(render_mode=None,
+                                        continuous_actions=True,
+                                        num_obstacles=self.n_obstacle,
+                                        num_good=self.n_good,
+                                        num_adversaries=self.n_adverse,
+                                        max_cycles=self.max_cyc)
+        observations_sam, infos = sim_env_sampled.reset(options=observation_sam)
+
+        first_actions = {}
+        for agent in sim_env_sampled.agents:
+            if "agent" in agent:
+                # write off my action
+                if agent == self.name:
+                    first_actions[self.name] = control_seq[0]
+                else:
+                    # write off others' actions here
+                    if agent in prev_actions.keys():
+                        # preceding agents
+                        first_actions[agent] = prev_actions[agent]
+                    else:
+                        # future agents
+                        first_actions[agent] = base_policy_towards_closest_with_angles(sim_env_sampled,observations_sam,agent)
+
+            else:
+                # adversary agents
+                # first_actions[agent] = sim_env.action_space(agent).sample()
+                first_actions[agent] = self.actions_adverse.get_action(agent,step_ct)
+
+
+        # take first step
+        observations_sam, rewards, terminations, truncations, _ = sim_env_sampled.step(first_actions)
+        step_ct += 1
+        cum_rew += self.process_reward(rewards)
+
+        local_done = all(terminations.values()) or all(truncations.values())
+
+        for t in range(self.horizon):
+            t = t + 1
+            if not local_done:
+                # compile actions for all others
+                actions = {}
+                for agent in sim_env_sampled.agents:
+                    if "agent" in agent:
+                        # write off my action
+                        if agent == self.name:
+                            actions[self.name] = control_seq[t]
+                        else:
+                            # write off others' actions here
+                            actions[agent] = base_policy_towards_closest_with_angles(sim_env_sampled,observations_sam,agent)
+                    else:
+                        # adversary agents
+                        # actions[agent] = sim_env.action_space(agent).sample()
+                        actions[agent] = self.actions_adverse.get_action(agent,step_ct)
+
+                observations_sam, rewards, terminations, truncations, _ = sim_env_sampled.step(actions)
+                step_ct += 1
+                cum_rew += self.process_reward(rewards)
+                local_done = all(terminations.values()) or all(truncations.values())
+
+
+        last_obs = observations_sam
+        # _termQ = terminalCost(sim_env,last_obs)
+        termQ = self.runRollout(last_obs,step_ct)
+        cum_rew += termQ
+        sim_env_sampled.close()
+        return cum_rew
+
+
+        
+
+
+    
     def runTrajectory(self,step_ct,observation,prev_actions):
         discountFactor = 0.99
         sim_env = simple_tag_v3.parallel_env(render_mode=None,
@@ -181,10 +256,19 @@ class MPPI_agent:
         # _termQ = terminalCost(sim_env,last_obs)
         termQ = self.runRollout(last_obs,step_ct)
         cum_rew += discount * termQ
-
+        sim_env.close()
         return local_pi_actions,cum_rew
     
+    def getQValue_forSampled(self,action_sampled,observation,prev_actions,step_ct):
+        QVal_Sampled = torch.zeros(self.n_samples, 1)
 
+        for sam in range(self.n_samples):
+            control_seq = action_sampled[:,sam,:]
+            cum_rew_sampled = self.runTrajectory_forSampled(step_ct,observation,prev_actions,control_seq)
+            QVal_Sampled[sam] = cum_rew_sampled
+                       
+        return QVal_Sampled
+         
 
     def generateSamples(self,step_ct,observation,prev_actions):
    
@@ -207,18 +291,30 @@ class MPPI_agent:
         mean = torch.zeros(self.horizon+1, self.action_dim)
         std = torch.ones(self.horizon+1, self.action_dim)
 
-        try:
-            mean[:-1] = self.prev_mean[1:]
-        except:
-            mean = mean
+       
+
+        if hasattr(self, 'prev_mean'):
+            try:
+                mean[:-1] = self.prev_mean[1:]
+            except:
+                import ipdb; ipdb.set_trace()
 
         for i in range(self.cem_iternations):
-
-            actionTensor,QValTensor = self.generateSamples(step_ct,observation,prev_actions)
+            print(self.name, i)
             
-            actionTensor = torch.clamp(mean.unsqueeze(1) + std.unsqueeze(1) * \
-                                    actionTensor
-                                    , 0, 1)
+            actionTensor,QValTensor = self.generateSamples(step_ct,observation,prev_actions)
+            # actionTensor -> torch.Size([11, 50, 5])
+            # QValTensor -> torch.Size([50, 1])
+
+            
+
+            if i >0 :
+                action_sampled = torch.clamp(torch.randn(11, 50, 5) * std.unsqueeze(1) + mean.unsqueeze(1), 0, 1)
+                qval_sampled = self.getQValue_forSampled(action_sampled,observation,prev_actions,step_ct)
+
+                actionTensor = torch.cat((actionTensor, action_sampled), dim=1)
+                QValTensor = torch.cat((QValTensor, qval_sampled), dim=0)
+
             
             # Compute elite actions
             elite_idxs = torch.topk(QValTensor.squeeze(1), self.num_elites, dim=0).indices
@@ -233,18 +329,23 @@ class MPPI_agent:
             max_value = elite_value.max(0)[0]
             score = torch.exp(self.temperature*(elite_value - max_value))
             score /= score.sum(0)
+            
             _mean = torch.sum(score.unsqueeze(0) * elite_actions, dim=1) / (score.sum(0) + 1e-9)
             _std = torch.sqrt(torch.sum(score.unsqueeze(0) * (elite_actions - _mean.unsqueeze(1)) ** 2, dim=1) / (score.sum(0) + 1e-9))
             _std = _std.clamp_(0.01, 2)
             mean, std = self.momentum * mean + (1 - self.momentum) * _mean, _std
+            # mean.shape -> torch.Size([11, 5]) (Need to sample  n_samples using mean and std)
+            # std.shape ->  torch.Size([11, 5]) (Need to sample  n_samples using mean and std)
+
+
 
         # Outputs
         score = score.squeeze(1).cpu().numpy()
         # actions = elite_actions[:,0]
         actions = elite_actions[:, np.random.choice(np.arange(score.shape[0]), p=score)] # ????
+        self.prev_mean = mean
         mean, std = actions[0], _std[0]
         a = mean
-        self.prev_mean = mean
         return a
     
 

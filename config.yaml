@@ -9,7 +9,7 @@ n_samples: 50
 momentum: 0.1
 num_elites: 5
 temperature: 0.5
-cem_iternations: 20
+cem_iternations: 2
 horizon: 10
 
 parallel_flag: true
