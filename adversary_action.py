@@ -6,8 +6,8 @@ class AdversaryActions:
     def __init__(self,seedVal,config,UMode):
         # Load the JSON data only once and filter for relevant information
         self.uncertaintyMode = UMode
-        input_file = self.get_adversary_file(seedVal)
-        self.data = self.load_and_filter_data(seedVal,config,input_file)
+        # input_file = self.get_adversary_file(seedVal)
+        # self.data = self.load_and_filter_data(seedVal,config,input_file)
 
     def get_adversary_file(self,seed, X=50):
         # Calculate the file index range
@@ -40,7 +40,8 @@ class AdversaryActions:
         return filtered_dict
 
     def get_action(self, adversary_name, step):
-        return self.data[adversary_name][step]
+        # return self.data[adversary_name][step]
+        return np.random.rand(5).tolist()
 
 
 def generate_actions_to_json(start,end,output_file="adversary_actions_X.json"):

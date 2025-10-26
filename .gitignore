@@ -17,6 +17,7 @@
 /mpe_cont2/
 /tdmpc2/tdmpc/
 /U2adversary_acts/
+/utilities/
 
 # Ignore .mp4 files
 *.mp4
@@ -27,3 +28,9 @@
 # Ignore .json files
 *.json
 
+# Ignore .ipynb files
+*.ipynb
+
+backup_mppi.py
+
+*.png

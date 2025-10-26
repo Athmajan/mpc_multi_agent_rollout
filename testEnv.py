@@ -17,6 +17,7 @@ from collections import defaultdict
 from datetime import datetime
 import torch
 import torch.nn as nn
+import time
 
 
 class ActionPredictor(nn.Module):
@@ -270,11 +271,11 @@ if __name__ == "__main__":
     if wandBLog:
         # Log configuration
         if not BPpolicy:
-            wandb.init(project="mpe_simulation", 
+            wandb.init(project="mpe_simulation_v2", 
                     name=f"BP{BPpolicy}_R_{start_run}_to_{end_run}_STD_{config['min_std']}_H_{config['horizon']}_T_{config['temperature']}_cem_{config['cem_iternations']}_NN_{config['n_samples']}_{config['num_elites']}",
                     config=config)  # Logs the entire configuration as a dictionary
         else:
-            wandb.init(project="mpe_simulation", 
+            wandb.init(project="mpe_simulation_v2", 
                     name=f"BP{BPpolicy}_R_{start_run}_to_{end_run}_MODE_{uncertainty}",
                     config=config)  # Logs the entire configuration as a dictionary
 
@@ -326,7 +327,7 @@ if __name__ == "__main__":
         done = False
         step_ct = 0
         meanDict = {}
-       
+        prev_time = time.time()
         while not done:
             actions = {}
             prev_actions = {}
@@ -335,6 +336,7 @@ if __name__ == "__main__":
                     if BPpolicy:
                         actions[agg] = base_policy_towards_closest_with_angles(env,observations,agg)
                     else:
+                        print("planning")
                         act_mpc = goodAgents[agg].plan(step_ct,observations,prev_actions)
                         
                         actions[agg] = act_mpc
@@ -374,8 +376,13 @@ if __name__ == "__main__":
             # import ipdb; ipdb.set_trace()
 
             frames_run.append(observations[env.agents[0]])
-            print(run,step_ct)
+            
+            curr_time = time.time()
+            step_time = curr_time - prev_time
+            print(run,step_ct,step_time )
+            prev_time = curr_time
             step_ct += 1
+            
 
             # This can be used to debug to see if the reset observation is working            
             # if step_ct%10 ==0:

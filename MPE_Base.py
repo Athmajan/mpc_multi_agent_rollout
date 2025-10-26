@@ -2,6 +2,18 @@ import numpy as np
 import math
 
 def count_roles(names):
+        """
+        Count how many adversaries and agents are present in a list of agent names.
+
+        The function expects names to be strings with prefixes "adversary_" or "agent_".
+        It returns a tuple (num_adversaries, num_agents).
+
+        Args:
+            names (iterable of str): List or iterable of agent names.
+
+        Returns:
+            tuple: (adversary_count, agent_count)
+        """
         counts = {"adversaries": 0, "agents": 0}
         for name in names:
             if name.startswith("adversary_"):
@@ -12,11 +24,52 @@ def count_roles(names):
         return counts["adversaries"],counts["agents"] 
 
 def extract_base_name_and_index(agent_name):
+    """
+    Split an agent name into the base name and the trailing index.
+
+    The agent name is expected to contain an underscore separating the base name
+    and an integer index (for example: "agent_3" -> ("agent", 3)).
+
+    Args:
+        agent_name (str): Agent name string containing an underscore and index.
+
+    Returns:
+        tuple: (base_name (str), base_index (int))
+    """
     base_name, base_index = agent_name.rsplit('_', 1)  # Split at the last underscore
     return base_name, int(base_index)  # Convert base_index to an integer
 
 
 def moveToClosestUnTagged2(env, observation, myname):
+    """
+    Find the closest untagged adversary relative to the specified agent.
+
+    This function interprets the flattened observation vector for the environment
+    to locate agent and adversary positions and adversary tagging flags.
+    It returns the position of the calling agent, the position of the closest
+    untagged adversary (or None if none exist), and the Euclidean distance to
+    that adversary.
+
+    Observation layout (assumed):
+      - First 2*ad_Ct entries: adversary positions (x, y) repeated per adversary
+      - Next 2*gd_Ct entries: agent positions (x, y) repeated per agent
+      - (velocity sections are present in the file but not used here)
+      - Flags region starting at index 4 * total_agents contains adversary flags
+
+    Args:
+        env: Environment object that contains env.agents (list of agent names).
+        observation (dict): A mapping from agent-name to that agent's full observation vector.
+                            The function reads the vector for env.agents[0] as the full global state.
+        myname (str): Name of the calling agent (e.g., "agent_0").
+
+    Returns:
+        tuple:
+            - my_position (ndarray): 1x2 array for the calling agent position.
+            - closest_adversary_position (ndarray or None): 1x2 array of closest untagged adversary position
+              or None if no untagged adversary exists.
+            - closest_distance (float): Euclidean distance to the closest untagged adversary, or inf if none.
+    """
+
     # Extract base name and index from the agent's name
     myBase, myIndex = extract_base_name_and_index(myname)
     myIndex = int(myIndex)  # Ensure myIndex is an integer
@@ -63,6 +116,22 @@ def terminal_rollout(env, observation):
 
 
 def terminalCost(env, observation):
+    """
+    Compute a terminal cost metric based on mean distances between agents and untagged adversaries.
+
+    The function interprets a global observation vector (from env.agents[0]) to obtain
+    adversary positions, agent positions and adversary tagging flags. It then computes
+    the Euclidean distances between every agent and every untagged adversary and returns
+    the mean of those distances. If no untagged adversary exists, returns 0.
+
+    Args:
+        env: Environment object that contains env.agents (list of agent names).
+        observation (dict): A mapping from agent-name to that agent's full observation vector.
+
+    Returns:
+        float: The mean Euclidean distance between all agents and untagged adversaries (or 0).
+    """
+
     # Full state observation for all agents
     glob_obs = observation[env.agents[0]]
     ad_Ct, gd_Ct = count_roles(env.agents)  # Count adversaries and good agents
@@ -90,6 +159,27 @@ def terminalCost(env, observation):
     return mean_distance
 
 def measureEnergy(observation,myname):
+    """
+    Compute a personal and "others" energy-like metric based on distances to untagged adversaries.
+
+    This function computes:
+      - myenergy: the mean Euclidean distance from the calling agent to every untagged adversary.
+      - othersEnergy: the mean Euclidean distance from all agents to every untagged adversary.
+
+    The observation is expected to be a dict mapping agent names to their observation vectors.
+    The function uses agent naming conventions ("adversary_*", "agent_*") to count roles and
+    extract positions and flags.
+
+    Args:
+        observation (dict): Mapping from agent-name to that agent's full observation vector.
+        myname (str): Name of the calling agent (e.g., "agent_0").
+
+    Returns:
+        tuple:
+            - myenergy (float): Mean distance from the calling agent to untagged adversaries (or 0).
+            - othersEnergy (float): Mean distance from all agents to untagged adversaries (or 0).
+    """
+
     glob_obs = observation[myname]
     ad_Ct = 0
     gd_Ct = 0
@@ -235,6 +325,21 @@ def base_policy_towards_closest_with_angles(env, observation, myname, step_size=
 
 
 def computeAngeinDeg(cosVal,sinVal):
+    """
+    Compute the angle in degrees from cosine and sine components.
+
+    Given cosine and sine values (cos(theta), sin(theta)), compute the angle in degrees
+    on the range [0, 360). This function uses acos to compute an angle and then
+    determines sign/direction based on the sine value.
+
+    Args:
+        cosVal (float): Cosine of the angle component (should be in [-1, 1]).
+        sinVal (float): Sine of the angle component (should be in [-1, 1]).
+
+    Returns:
+        float: Angle in degrees in the range [0, 360).
+    """
+    
     a_acos = math.acos(cosVal)
     if sinVal < 0:
         angle = math.degrees(-a_acos) % 360

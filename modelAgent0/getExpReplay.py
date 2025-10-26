@@ -1,6 +1,44 @@
 from pymongo import MongoClient
 
 def fetch_filtered_documents(collectionName):
+    """
+    Fetch documents from the specified MongoDB collection where the maximum 'step'
+    for each 'seed' is less than 34, and return the previous observations and actions
+    for agent_0 for those documents.
+
+    The function performs the following steps:
+    - Connect to MongoDB at 'mongodb://localhost:27017/'.
+    - Use the database named 'mpe_continuous'.
+    - Aggregate the collection to find the maximum 'step' for each distinct 'seed'.
+    - Select seeds where their maximum 'step' is less than 34.
+    - Query the collection for documents matching those seeds and project the
+      'prev_observations', 'actions', and 'seed' fields.
+    - Extract the 'agent_0' entries from 'prev_observations' and 'actions' for each result
+      and return a list of dictionaries with keys: 'seed', 'prev_observations', 'actions'.
+
+    Parameters:
+    - collectionName (str): Name of the collection within the 'mpe_continuous' database
+      to query.
+
+    Returns:
+    - list[dict]: A list of dictionaries, each containing:
+        - 'seed': the seed identifier for the document
+        - 'prev_observations': the 'agent_0' entry from the document's 'prev_observations' field
+        - 'actions': the 'agent_0' entry from the document's 'actions' field
+
+    Raises:
+    - pymongo.errors.PyMongoError (or subclass): If there is an error connecting to MongoDB
+      or running the aggregation/query.
+    - KeyError/TypeError: If expected nested keys (like 'agent_0') are missing or not shaped
+      as expected in returned documents.
+
+    Example:
+    >>> documents = fetch_filtered_documents('seq_roll_2_4_10_20_3')
+    >>> documents[0]
+    {'seed': 123, 'prev_observations': {...}, 'actions': {...}}
+    """
+     
+
     # Connect to MongoDB
     client = MongoClient('mongodb://localhost:27017/')  # Replace with your MongoDB URI if different
     db = client['mpe_continuous']  # Replace with your database name
